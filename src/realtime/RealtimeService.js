@@ -1,9 +1,10 @@
 import { realtimeTools } from './realtimeTools.js';
 
 const instructions = `
-Eres un asistente de voz para ayudar a usuarios dentro de un portal web con formularios.
-Habla en espanol, con frases breves, claras y naturales.
-Guia al usuario paso a paso.
+Eres Hiper, el asistente de voz del Portal de Proveedores de Hipermaxi.
+Habla en espanol, con frases breves, claras y naturales. Presentate como Hiper solo al iniciar o cuando te pregunten tu nombre.
+Escucha con paciencia: no respondas hasta que el usuario haya terminado la idea. Si escuchas ruido, respiracion, una palabra suelta o una frase incompleta, pide que repita en vez de ejecutar acciones.
+Guia al usuario paso a paso, pero evita monologos largos. Da una instruccion y espera la respuesta del usuario.
 Cuando el usuario pregunte donde llenar algo, enfoca y resalta el campo correspondiente.
 Cuando el usuario no entienda un campo, explicalo y muestra un ejemplo.
 Cuando el usuario pida llenar un campo con un valor, llama la tool ui_fill_field.
@@ -11,6 +12,7 @@ Cuando el usuario pregunte por errores del formulario, llama ui_validate_form o 
 Cuando el usuario pregunte por datos de productos, nombres, registros, codigos o precios, usa data_get_products, data_find_product o data_get_product_price antes de responder.
 Si el usuario dice que quiere agregar, anadir o crear un nuevo pedido, usa ui_start_new_order_flow y luego pregunta por la descripcion del pedido. Ese flujo es conversacional, no es una guia visual.
 Si el usuario dice que quiere crear, agregar o anadir un nuevo producto, usa ui_start_new_product_flow y luego pregunta por la descripcion del producto. Ese flujo es conversacional, no es una guia visual.
+Si el usuario esta en Home y dice que es nuevo en la plataforma, quiere ser nuevo proveedor o registrarse como proveedor, usa ui_start_new_supplier_guide.
 No inventes campos que no existan. No menciones nombres tecnicos como data-ai-field, id, selector o name al usuario.
 Si no sabes que campo corresponde, primero llama ui_get_page_context o ui_find_field con el texto humano del usuario.
 Si ui_find_field devuelve un elemento, usa su elementId para ui_focus_field, ui_highlight_field, ui_fill_field o ui_click_button.
@@ -20,21 +22,46 @@ Puedes llenar campos, enfocar elementos, hacer click en botones confirmados, mos
 Cuando el usuario pida una guia completa, una serie de pasos o que lo guies por un proceso, usa ui_run_guided_steps con pasos cortos y targets humanos cuando los conozcas.
 Si el usuario pide "guiame para crear un nuevo producto", "guia para nuevo producto", "soporte y ayuda para producto" o algo similar, usa ui_start_product_creation_guide. No preguntes datos del producto en ese caso.
 No uses ui_start_product_creation_guide cuando el usuario solo diga "crear nuevo producto" sin pedir guia, ayuda, soporte o paso a paso.
-Despues de llamar ui_run_guided_steps o ui_start_product_creation_guide no sigas hablando: el frontend desactiva la voz mientras la guia visual queda activa.
+Despues de llamar ui_run_guided_steps, ui_start_product_creation_guide o ui_start_new_supplier_guide no sigas hablando: el frontend desactiva la voz mientras la guia visual queda activa.
 No necesitas conocer IDs tecnicos: usa ui_get_page_context y ui_find_field. El backend MCP ui-automation-mcp traduce tus tools a acciones UI del navegador.
 `;
 
-const createSessionBody = () => ({
+const turnDetectionConfig = (mode = process.env.OPENAI_REALTIME_VAD_MODE || 'semantic_vad') => {
+  if (mode === 'server_vad') {
+    return {
+      type: 'server_vad',
+      threshold: Number(process.env.OPENAI_REALTIME_VAD_THRESHOLD || 0.65),
+      prefix_padding_ms: Number(process.env.OPENAI_REALTIME_VAD_PREFIX_MS || 350),
+      silence_duration_ms: Number(process.env.OPENAI_REALTIME_VAD_SILENCE_MS || 850),
+      create_response: true,
+      interrupt_response: true,
+    };
+  }
+
+  return {
+    type: 'semantic_vad',
+    eagerness: process.env.OPENAI_REALTIME_SEMANTIC_EAGERNESS || 'low',
+    create_response: true,
+    interrupt_response: true,
+  };
+};
+
+const createSessionBody = (vadMode) => ({
   session: {
     type: 'realtime',
     model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
     instructions,
     audio: {
       input: {
-        turn_detection: {
-          type: 'server_vad',
-          interrupt_response: true,
+        noise_reduction: {
+          type: 'near_field',
         },
+        transcription: {
+          model: process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',
+          language: 'es',
+          prompt: 'Vocabulario frecuente: Hipermaxi, Portal de Proveedores, Hiper, proveedor, factura, AVD, aviso de despacho, nuevo proveedor, credenciales.',
+        },
+        turn_detection: turnDetectionConfig(vadMode),
       },
       output: {
         voice: process.env.OPENAI_REALTIME_VOICE || 'marin',
@@ -44,6 +71,24 @@ const createSessionBody = () => ({
     tool_choice: 'auto',
   },
 });
+
+const parseResponse = async (response) => {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { raw: text };
+  }
+};
+
+const shouldRetryWithServerVad = (response, data) => {
+  const message = String(data?.error?.message || data?.message || data?.raw || '').toLowerCase();
+  return !response.ok && (
+    message.includes('semantic_vad') ||
+    message.includes('eagerness') ||
+    message.includes('turn_detection')
+  );
+};
 
 export const RealtimeService = {
   async createClientSecret() {
@@ -55,7 +100,7 @@ export const RealtimeService = {
       throw error;
     }
 
-    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    let response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -63,13 +108,18 @@ export const RealtimeService = {
       },
       body: JSON.stringify(createSessionBody()),
     });
+    let data = await parseResponse(response);
 
-    const text = await response.text();
-    let data;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { raw: text };
+    if (shouldRetryWithServerVad(response, data)) {
+      response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(createSessionBody('server_vad')),
+      });
+      data = await parseResponse(response);
     }
 
     if (!response.ok) {

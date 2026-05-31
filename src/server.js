@@ -50,6 +50,47 @@ const readBody = (req) =>
     });
   });
 
+const compactText = (value, maxLength = 160) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+};
+
+const buildRagMessage = ({ query, pageContext, credentialState }) => {
+  const contextLines = [];
+
+  if (pageContext && typeof pageContext === 'object') {
+    const page = pageContext;
+    contextLines.push(`Pagina actual: ${page.path || 'desconocida'}.`);
+    if (page.pageHeading) contextLines.push(`Encabezado visible: ${compactText(page.pageHeading)}.`);
+    if (Array.isArray(page.sections) && page.sections.length) {
+      contextLines.push(`Secciones visibles: ${page.sections.map((section) => compactText(section.label, 60)).slice(0, 6).join(', ')}.`);
+    }
+    if (Array.isArray(page.actions) && page.actions.length) {
+      contextLines.push(`Acciones visibles: ${page.actions.map((action) => compactText(action.label, 60)).slice(0, 6).join(', ')}.`);
+    }
+  }
+
+  if (credentialState && typeof credentialState === 'object') {
+    const state = credentialState;
+    contextLines.push(
+      `Estado simulado de credenciales: ${state.status || 'desconocido'}; ` +
+      `tiene credenciales: ${state.hasCredentials ? 'si' : 'no'}; ` +
+      `entrega: ${state.deliveryState || 'desconocida'}; ` +
+      `rol: ${state.userRole || 'desconocido'}.`,
+    );
+    if (state.note) contextLines.push(`Nota de simulacion: ${compactText(state.note)}.`);
+  }
+
+  if (!contextLines.length) return String(query || '');
+
+  return [
+    'Contexto actual del portal para recuperar SOPs relevantes:',
+    ...contextLines,
+    '',
+    `Consulta del usuario: ${String(query || '')}`,
+  ].join('\n');
+};
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host}`);
 
@@ -80,10 +121,15 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/knowledge/search') {
       const payload = await readBody(req);
+      const message = buildRagMessage({
+        query: payload.query,
+        pageContext: payload.pageContext,
+        credentialState: payload.credentialState,
+      });
       const ragRes = await fetch(RAG_RETRIEVE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: String(payload.query || ''), top_k: payload.top_k || 4 }),
+        body: JSON.stringify({ message, top_k: payload.top_k || 4 }),
       });
       const data = ragRes.ok ? await ragRes.json() : { chunks: [] };
       sendJson(res, 200, data);
