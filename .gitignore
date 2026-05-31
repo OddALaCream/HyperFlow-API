@@ -89,3 +89,8 @@ temp/
 
 # Claude Code
 .claude/
+
+# Python RAG (rag/)
+venv/
+**/__pycache__/
+*.pyc
