@@ -49,6 +49,30 @@ const getNextAction = (intent) => {
   return 'ANSWER_ONLY';
 };
 
+// Maps a SOP code (by prefix) to a frontend route the chat can redirect to.
+// `openGuide: true` also auto-activates that page's voice guide (via ?guide=1);
+// `false` is a plain redirect link without the guide.
+// Add one entry here to support redirecting from any other page.
+const NAV_MAP = [
+  { match: 'SOP-SR-01', route: '/nuevo-proveedor', openGuide: true, label: 'Ir y mostrarme cómo' },
+  { match: 'SOP-SR-03', route: '/nuevo-proveedor', openGuide: true, label: 'Ir y mostrarme cómo' },
+  { match: 'SOP-04', route: '/productos', openGuide: false, label: 'Ir a Productos' },
+  { match: 'SOP-05', route: '/facturas', openGuide: false, label: 'Ir a Facturas' },
+  { match: 'SOP-06', route: '/avd', openGuide: false, label: 'Ir a Aviso de Despacho' },
+];
+
+// Derives a navigation action from the highest-scoring source's SOP code.
+const buildAction = (sources) => {
+  for (const source of sources) {
+    const id = String(source.id || '');
+    const entry = NAV_MAP.find((nav) => id.startsWith(nav.match));
+    if (entry) {
+      return { type: 'NAVIGATE', route: entry.route, label: entry.label, openGuide: entry.openGuide };
+    }
+  }
+  return null;
+};
+
 const fieldMessages = {
   description: 'descripcion',
   internalCode: 'codigo interno proveedor',
@@ -108,17 +132,33 @@ const buildAnswer = ({ intent, message, chunks, validation }) => {
 };
 
 export const SupportAgentService = {
-  chat(payload) {
+  async chat(payload) {
     const message = String(payload.message || '');
     const process = payload.process || 'registro_producto';
     const intent = detectIntent(message);
-    const knowledge = KnowledgeService.search(message, process);
+    const knowledge = await KnowledgeService.search(message, process);
     const validation = payload.formState && Object.keys(payload.formState).length
       ? ValidationService.validate(payload.formState)
       : null;
-    const answer = buildAnswer({ intent, message, chunks: knowledge.chunks, validation });
     const nextAction = getNextAction(intent);
-    const confidence = knowledge.chunks.length ? Math.min(0.96, 0.74 + knowledge.chunks[0].score / 100) : 0.35;
+
+    // For open knowledge questions (no form/guide action) prefer the RAG's
+    // generated answer; validation and guide flows stay rule-based/deterministic.
+    const ruleAnswer = buildAnswer({ intent, message, chunks: knowledge.chunks, validation });
+    const useRagAnswer =
+      nextAction === 'ANSWER_ONLY' && knowledge.ragAnswer && !(validation && validation.errors.length > 0);
+    const answer = useRagAnswer ? knowledge.ragAnswer : ruleAnswer;
+
+    // RAG returns RRF scores (small, ~0.01-0.05) on a different scale than the
+    // local keyword score, so derive confidence per source.
+    let confidence = 0.35;
+    if (knowledge.chunks.length) {
+      confidence = knowledge.source === 'rag'
+        ? (useRagAnswer ? 0.9 : 0.82)
+        : Math.min(0.96, 0.74 + knowledge.chunks[0].score / 100);
+    }
+
+    const sources = knowledge.chunks.map(({ id, title, score }) => ({ id, title, score }));
 
     const response = {
       answer,
@@ -126,7 +166,12 @@ export const SupportAgentService = {
       process,
       next_action: nextAction,
       confidence,
-      sources: knowledge.chunks.map(({ id, title, score }) => ({ id, title, score })),
+      answer_source: useRagAnswer ? 'rag' : 'rules',
+      knowledge_source: knowledge.source,
+      sources,
+      // Only redirect from RAG matches: the local fallback corpus only knows
+      // SOP-04, so it could confidently point to the wrong page.
+      action: knowledge.source === 'rag' ? buildAction(sources) : null,
       suggested_guide: 'registro-producto',
     };
 

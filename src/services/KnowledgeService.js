@@ -51,15 +51,56 @@ export const searchKnowledge = (query, process) => {
     .slice(0, 3);
 };
 
+const RAG_URL = process.env.RAG_URL || 'http://localhost:8000/rag/query';
+// Gemini generation in the RAG takes ~7-8s, so allow a generous timeout
+// before falling back to the local keyword search.
+const RAG_TIMEOUT_MS = Number(process.env.RAG_TIMEOUT_MS || 30000);
+
+const localSearch = (query, process) => ({
+  source: 'local',
+  ragAnswer: null,
+  chunks: searchKnowledge(query, process).map(({ id, title, content, score }) => ({
+    id,
+    title,
+    content,
+    score,
+  })),
+});
+
 export const KnowledgeService = {
-  search(query, process) {
-    return {
-      chunks: searchKnowledge(query, process).map(({ id, title, content, score }) => ({
-        id,
-        title,
-        content,
-        score,
-      })),
-    };
+  // Queries the Python RAG microservice (semantic + generated answer) and
+  // falls back to the local keyword search if it is unreachable.
+  async search(query, process) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), RAG_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(RAG_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: query, top_k: 5 }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        return localSearch(query, process);
+      }
+
+      const data = await res.json();
+      return {
+        source: 'rag',
+        ragAnswer: data.answer || null,
+        chunks: (data.sources || []).map(({ id, title, content, score }) => ({
+          id,
+          title,
+          content,
+          score,
+        })),
+      };
+    } catch {
+      return localSearch(query, process);
+    } finally {
+      clearTimeout(timeout);
+    }
   },
 };

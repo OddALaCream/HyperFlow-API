@@ -8,8 +8,11 @@ import { InteractionLogService } from './services/InteractionLogService.js';
 import { RealtimeService } from './realtime/RealtimeService.js';
 import { acceptWebSocket } from './ws/websocket.js';
 import { createUiAutomationRuntime } from './uiAutomation/createUiAutomationRuntime.js';
+import { AssistantService } from './assistant/AssistantService.js';
 
 loadEnv();
+
+const RAG_RETRIEVE_URL = process.env.RAG_RETRIEVE_URL || 'http://localhost:8000/rag/retrieve';
 
 const port = Number(process.env.PORT || 3001);
 const uiAutomation = createUiAutomationRuntime();
@@ -58,13 +61,32 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'POST' && url.pathname === '/api/support-agent/chat') {
       const payload = await readBody(req);
-      sendJson(res, 200, SupportAgentService.chat(payload));
+      sendJson(res, 200, await SupportAgentService.chat(payload));
       return;
     }
 
     if (req.method === 'POST' && url.pathname === '/api/realtime/session') {
       const session = await RealtimeService.createClientSecret();
       sendJson(res, 200, session);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/assistant/chat') {
+      const payload = await readBody(req);
+      const result = await AssistantService.chat(payload);
+      sendJson(res, 200, result);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/knowledge/search') {
+      const payload = await readBody(req);
+      const ragRes = await fetch(RAG_RETRIEVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: String(payload.query || ''), top_k: payload.top_k || 4 }),
+      });
+      const data = ragRes.ok ? await ragRes.json() : { chunks: [] };
+      sendJson(res, 200, data);
       return;
     }
 

@@ -86,3 +86,6 @@ coverage/
 # Optional: temporary files
 tmp/
 temp/
+
+# Claude Code
+.claude/
