@@ -1,11 +1,18 @@
 import http from 'node:http';
 import { URL } from 'node:url';
+import { loadEnv } from './config/env.js';
 import { SupportAgentService } from './services/SupportAgentService.js';
 import { GuideService } from './services/GuideService.js';
 import { ValidationService } from './services/ValidationService.js';
 import { InteractionLogService } from './services/InteractionLogService.js';
+import { RealtimeService } from './realtime/RealtimeService.js';
+import { acceptWebSocket } from './ws/websocket.js';
+import { createUiAutomationRuntime } from './uiAutomation/createUiAutomationRuntime.js';
+
+loadEnv();
 
 const port = Number(process.env.PORT || 3001);
+const uiAutomation = createUiAutomationRuntime();
 
 const sendJson = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -55,6 +62,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/realtime/session') {
+      const session = await RealtimeService.createClientSecret();
+      sendJson(res, 200, session);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/mcp/ui-automation/tools') {
+      sendJson(res, 200, {
+        server: uiAutomation.mcpServer.name,
+        connected_frontends: uiAutomation.bridge.hasClients() ? 1 : 0,
+        tools: uiAutomation.mcpClient.listTools(),
+      });
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/guides/registro-producto') {
       sendJson(res, 200, GuideService.getRegistroProductoGuide());
       return;
@@ -98,8 +120,42 @@ const server = http.createServer(async (req, res) => {
       confidence: 0,
       action_taken: 'ERROR',
     });
-    sendJson(res, 500, { error: error.message });
+    sendJson(res, error.statusCode || 500, { error: error.message });
   }
+});
+
+server.on('upgrade', (req, socket) => {
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+
+  if (url.pathname !== '/ws/ui-automation') {
+    socket.destroy();
+    return;
+  }
+
+  const client = acceptWebSocket(req, socket);
+  uiAutomation.bridge.register(client);
+
+  client.onMessage(async (message) => {
+    if (message.type === 'ui_action_result') {
+      uiAutomation.bridge.resolve(message.id, message.result);
+      return;
+    }
+
+    if (message.type === 'mcp_tool_call') {
+      const result = await uiAutomation.mcpClient.callTool(message.name, message.args || {});
+      client.send({
+        type: 'mcp_tool_result',
+        id: message.id,
+        result,
+      });
+    }
+  });
+
+  client.send({
+    type: 'ui_automation_ready',
+    server: uiAutomation.mcpServer.name,
+    tools: uiAutomation.mcpClient.listTools().map((tool) => tool.name),
+  });
 });
 
 server.listen(port, () => {
