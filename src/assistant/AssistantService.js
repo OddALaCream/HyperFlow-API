@@ -7,7 +7,7 @@ import { realtimeTools } from '../realtime/realtimeTools.js';
 const MODEL = process.env.OPENAI_ASSISTANT_MODEL || 'gpt-4o-mini';
 
 const SYSTEM_PROMPT = `
-Eres HiperBot, el asistente del Portal de Proveedores de Hipermaxi. Respondes por texto,
+Eres Maxi, el asistente del Portal de Proveedores de Hipermaxi. Respondes por texto,
 en espanol, de forma cordial, clara y breve. Ayudas al proveedor a entender el portal,
 completar formularios y resolver dudas.
 
