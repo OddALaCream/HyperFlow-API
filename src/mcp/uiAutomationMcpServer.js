@@ -44,6 +44,35 @@ export const uiAutomationMcpTools = [
     title: { type: 'string' },
     steps: { type: 'array', items: { type: 'string' } },
   }, ['title', 'steps'])),
+  tool('ui_run_guided_steps', 'Ejecuta una guia visual paso a paso en el frontend. Al iniciarse, el asistente de voz debe ocultarse y desactivarse hasta que la guia termine.', schema({
+    title: { type: 'string' },
+    steps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          message: { type: 'string' },
+          target: { type: 'string', description: 'Texto humano o elementId del campo, boton o seccion a resaltar.' },
+        },
+        required: ['message'],
+        additionalProperties: false,
+      },
+    },
+  }, ['title', 'steps'])),
+  tool('ui_start_new_product_flow', 'Inicia el flujo conversacional para crear o agregar un nuevo producto. Navega a Productos, presiona el boton Nuevo y devuelve la siguiente pregunta para pedir la descripcion. No ejecuta Soporte y Ayuda ni guia paso a paso.', schema()),
+  tool('ui_start_product_creation_guide', 'SOLO para cuando el usuario pide explicitamente guia, soporte, ayuda o paso a paso para crear producto. Navega a Productos y ejecuta exactamente el boton Soporte y Ayuda. No usar si el usuario solo dice crear/agregar nuevo producto.', schema()),
+  tool('ui_start_new_order_flow', 'Inicia el flujo conversacional para agregar un nuevo pedido. Navega al modulo de pedidos/AVD y devuelve la siguiente pregunta que la IA debe hacer al usuario.', schema()),
+  tool('data_get_products', 'Devuelve una lista compacta de productos disponibles para que la IA pueda responder preguntas del usuario. Incluye nombre, barra, registro sanitario y precio si existe.', schema({
+    limit: { type: 'number' },
+  })),
+  tool('data_find_product', 'Busca productos por nombre, codigo de barra o registro sanitario y devuelve coincidencias compactas.', schema({
+    query: { type: 'string' },
+    limit: { type: 'number' },
+  }, ['query'])),
+  tool('data_get_product_price', 'Busca un producto por nombre o codigo y devuelve su precio si esta registrado.', schema({
+    query: { type: 'string' },
+  }, ['query'])),
   tool('ui_clear_assistant_ui', 'Limpia resaltados, tooltips y paneles.'),
   tool('ui_scroll_to_section', 'Hace scroll a una seccion visible.', schema({
     sectionId: { type: 'string' },
@@ -73,6 +102,13 @@ const toolToFrontendAction = {
   ui_validate_form: 'ui_validate_form',
   ui_go_to_next_error: 'ui_go_to_next_error',
   ui_show_steps: 'ui_show_steps',
+  ui_run_guided_steps: 'ui_run_guided_steps',
+  ui_start_new_product_flow: 'ui_start_new_product_flow',
+  ui_start_product_creation_guide: 'ui_start_product_creation_guide',
+  ui_start_new_order_flow: 'ui_start_new_order_flow',
+  data_get_products: 'data_get_products',
+  data_find_product: 'data_find_product',
+  data_get_product_price: 'data_get_product_price',
   ui_clear_assistant_ui: 'ui_clear_assistant_ui',
   ui_scroll_to_section: 'ui_scroll_to_section',
   ui_explain_field: 'ui_explain_field',
