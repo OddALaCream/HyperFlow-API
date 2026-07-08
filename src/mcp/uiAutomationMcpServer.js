@@ -79,6 +79,8 @@ export const uiAutomationMcpTools = [
     sectionId: { type: 'string' },
     message: { type: 'string' },
   }, ['sectionId'])),
+  tool('ui_next_section', 'Avanza al SIGUIENTE PASO de un formulario por pasos (wizard), haciendo click en el boton Siguiente/Continuar. Usar cuando el usuario dice "siguiente seccion", "siguiente paso" o "continuar" dentro de un formulario. NO es navegacion entre paginas y NO envia el formulario.', schema()),
+  tool('ui_previous_section', 'Vuelve al PASO ANTERIOR de un formulario por pasos (wizard), haciendo click en el boton Anterior/Atras. Usar cuando el usuario dice "seccion anterior", "paso anterior" o "regresar" dentro de un formulario.', schema()),
   tool('ui_explain_field', 'Explica un campo usando label, placeholder, ayuda y estado actual.', schema({
     fieldId: { type: 'string' },
   }, ['fieldId'])),
@@ -161,6 +163,8 @@ const toolToFrontendAction = {
   data_get_product_price: 'data_get_product_price',
   ui_clear_assistant_ui: 'ui_clear_assistant_ui',
   ui_scroll_to_section: 'ui_scroll_to_section',
+  ui_next_section: 'ui_next_section',
+  ui_previous_section: 'ui_previous_section',
   ui_explain_field: 'ui_explain_field',
   ui_autofill_from_user_message: 'ui_autofill_from_user_message',
   ui_perform_task: 'ui_perform_task',

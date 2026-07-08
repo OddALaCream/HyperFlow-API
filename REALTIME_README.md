@@ -7,7 +7,7 @@
 
 ```bash
 OPENAI_API_KEY=tu_api_key_aqui
-OPENAI_REALTIME_MODEL=gpt-realtime
+OPENAI_REALTIME_MODEL=gpt-realtime-2.1-mini
 OPENAI_REALTIME_VOICE=marin
 ```
 

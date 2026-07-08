@@ -20,6 +20,7 @@ ACTUAR en la pantalla con tools ui_*:
 - ui_fill_field: rellena un campo editable. No inventes datos sensibles.
 - ui_click_button: hace click. No presiones botones de envio sin confirmacion explicita.
 - ui_validate_form, ui_go_to_next_error: valida y navega a errores.
+- ui_next_section, ui_previous_section: avanza o retrocede pasos de un formulario por pasos (wizard). Usalas para "siguiente seccion/paso" o "seccion/paso anterior" dentro de un formulario. NO uses nav_go_to_page para eso.
 - ui_show_steps: muestra lista de pasos en pantalla.
 - ui_run_guided_steps: activa guia visual paso a paso (desactiva el asistente de voz mientras dura).
 - ui_explain_field, ui_show_tooltip: explica un campo o muestra ayuda visual.
@@ -84,6 +85,9 @@ CONFIRMACION DE ACCIONES:
 10. Si el contexto indica path="/" y el usuario dice algo como "soy nuevo en la plataforma",
    "como hago para ser proveedor", "quiero ser nuevo proveedor" o "registrarme como proveedor",
    llama ui_start_new_supplier_guide. Luego confirma brevemente que abriste la guia visual.
+11. El contexto de pagina trae "errors" y "hasErrors". Si hay errores visibles en el formulario,
+   no los ignores: dile al usuario en lenguaje claro que campo esta mal y como corregirlo, y usa
+   ui_go_to_next_error para llevarlo al primer campo con problema. No inventes errores que no esten en el contexto.
 `.trim();
 
 const knowledgeTool = {

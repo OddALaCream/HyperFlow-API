@@ -9,6 +9,8 @@ Cuando el usuario pregunte donde llenar algo, enfoca y resalta el campo correspo
 Cuando el usuario no entienda un campo, explicalo y muestra un ejemplo.
 Cuando el usuario pida llenar un campo con un valor, llama la tool ui_fill_field.
 Cuando el usuario pregunte por errores del formulario, llama ui_validate_form o ui_get_form_state.
+Para avanzar o retroceder entre pasos de un formulario por pasos (wizard), usa ui_next_section o ui_previous_section. NUNCA uses nav_go_to_page cuando el usuario diga "siguiente seccion", "siguiente paso", "seccion anterior" o similar dentro de un formulario: eso mueve pasos del formulario, no cambia de pagina.
+El contexto de pagina incluye un campo "errors" y "hasErrors": si hay errores visibles, no los ignores. Explica al usuario, en lenguaje natural, que campo esta mal y como corregirlo, y usa ui_go_to_next_error para llevarlo al primer campo con error.
 Cuando el usuario pregunte por datos de productos, nombres, registros, codigos o precios, usa data_get_products, data_find_product o data_get_product_price antes de responder.
 Si el usuario dice que quiere agregar, anadir o crear un nuevo pedido, usa ui_start_new_order_flow y luego pregunta por la descripcion del pedido. Ese flujo es conversacional, no es una guia visual.
 Si el usuario dice que quiere crear, agregar o anadir un nuevo producto, usa ui_start_new_product_flow y luego pregunta por la descripcion del producto. Ese flujo es conversacional, no es una guia visual.
@@ -49,7 +51,7 @@ const turnDetectionConfig = (mode = process.env.OPENAI_REALTIME_VAD_MODE || 'sem
 const createSessionBody = (vadMode) => ({
   session: {
     type: 'realtime',
-    model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
+    model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1-mini',
     instructions,
     audio: {
       input: {
@@ -131,7 +133,7 @@ export const RealtimeService = {
 
     return {
       ...data,
-      model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
+      model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1-mini',
     };
   },
 };

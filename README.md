@@ -59,7 +59,7 @@ HyperFlow-API/
 OPENAI_API_KEY=sk-...
 # Opcionales:
 OPENAI_ASSISTANT_MODEL=gpt-4o-mini          # modelo del chat de texto
-OPENAI_REALTIME_MODEL=gpt-realtime          # modelo de voz
+OPENAI_REALTIME_MODEL=gpt-realtime-2.1-mini # modelo de voz
 OPENAI_REALTIME_VOICE=marin                 # voz
 PORT=3001                                   # puerto del backend
 RAG_RETRIEVE_URL=http://localhost:8000/rag/retrieve
